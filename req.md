@@ -10,6 +10,6 @@ https://github.com/VarunGumma/IndicTransToolkit.git
 
 sacrebleu
 peft
-
+pip install sentencepiece
 
 train_checkpoints
