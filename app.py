@@ -39,6 +39,34 @@ from transformers import (AutoModelForSeq2SeqLM,AutoTokenizer)
 import IndicTransToolkit 
 from IndicTransToolkit import IndicProcessor
 
+from transformers import Blip2ForConditionalGeneration
+from peft import PeftModel, PeftConfig
+from tqdm import tqdm
+from transformers import Blip2Processor
+
+peft_model_id = "/Users/gokulgopank/Documents/deploy/peft"
+config = PeftConfig.from_pretrained(peft_model_id)
+offload_folder = '/Users/gokulgopank/Documents/deploy/offload'
+device = "cuda" if torch.cuda.is_available() else "cpu"
+device_map = {
+    "query_tokens": 0,
+    "vision_model":0,
+    "language_model": 1,
+    "language_projection": 1,
+    "lm_head": 1,
+    "qformer": 0,
+}
+max_memory = {i: "4GB" for i in range(2)} #2 GPU
+
+model_blip = Blip2ForConditionalGeneration.from_pretrained(config.base_model_name_or_path,
+                                                        device_map = "auto",
+                                                      torch_dtype = torch.float16,offload_folder=offload_folder
+                                                     )
+
+model_blip = PeftModel.from_pretrained(model_blip, peft_model_id)
+checkpoint = 'Salesforce/blip2-opt-2.7b'
+processor = Blip2Processor.from_pretrained(checkpoint)
+
 #set embedding dimension
 embedding_dim = 256
 units = 512
@@ -274,27 +302,7 @@ trans_dict = {"Bengali": ["ben_Beng","bn"],"English": ["eng_Latn","en"],"Gujarat
 
 example_images = [["/Users/gokulgopank/Documents/deploy/Capstone/Images/667626_18933d713e.jpg"],["/Users/gokulgopank/Documents/deploy/Capstone/Images/3637013_c675de7705.jpg"]]
 
-def process_image(image,lan):
-    global aa
-    save_dir = "uploaded_images"
-    os.makedirs(save_dir, exist_ok=True)
-
-    # Save the uploaded image
-    image_path = os.path.join(save_dir, "uploaded_image.jpg")
-    image.save(image_path)
-    eng_cap ,result,attention_plot= gen_cap(image_path)
-    # Dummy description generation for demonstration
-    if lan == "English":
-        tar_cap = eng_cap
-        lange ="en"
-    else:
-        tar_cap = translate(eng_cap,trans_dict[lan][0])
-        lange = trans_dict[lan][1]
-
-    # Convert text to speech
-    speech = gTTS("Predicted Caption is: "+ tar_cap,lang = lange, slow = False)
-    speech.save('audio.mp3')
-    #audio_file = 'audio.mp3'
+def get_att_plot(result,attention_plot):
     output_images,image_titles = plot_attmap(result,attention_plot)
     plt.imshow(output_images[0])
 
@@ -315,8 +323,55 @@ def process_image(image,lan):
         buf.seek(0)  # Rewind the BytesIO object
         img = Image.open(buf)  # Open the image using PIL
         images.append(img)  # Append the PIL image to the list
-        
-    return eng_cap, tar_cap, "audio.mp3", images
+    return images
+
+def gen_cap_blip(image_path):
+    image = Image.open(image_path)
+
+    #Inferance on CPU
+    inputs = processor(images = image, return_tensors = "pt").to("cpu")
+    pixel_values = inputs.pixel_values
+
+    model = model_blip.to("cpu")
+    generated_ids = model.generate(pixel_values = pixel_values, max_length = 10)
+    generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+    print('Caption: '+ generated_caption)
+    return generated_caption
+
+def process_image(image,mod_name, lan):
+    global aa
+    save_dir = "uploaded_images"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Save the uploaded image
+    image_path = os.path.join(save_dir, "uploaded_image.jpg")
+    image.save(image_path)
+    if mod_name == "Model from scratch":
+        eng_cap ,result,attention_plot= gen_cap(image_path)
+    else:
+        eng_cap = gen_cap_blip(image_path)
+    # Dummy description generation for demonstration
+    if lan == "English":
+        tar_cap = eng_cap
+        lange ="en"
+    else:
+        tar_cap = translate(eng_cap,trans_dict[lan][0])
+        lange = trans_dict[lan][1]
+
+    # Convert text to speech
+    speech = gTTS("Predicted Caption is: "+ tar_cap,lang = lange, slow = False)
+    speech.save('audio.mp3')
+    if mod_name == "Model from scratch":
+        message = "Using a model trained from scratch. Results may vary."
+    else:
+        message = "Using blip2 fine tuned model. Inference may take upto 30s"
+    if mod_name == "Model from scratch":
+        images = get_att_plot(result,attention_plot)   
+        return message, eng_cap, tar_cap, "audio.mp3", gr.update(value=images, visible=True)
+    else:
+        return message, eng_cap, tar_cap, "audio.mp3", gr.update(visible=False)
+
 
 # Create the Gradio interface
 interface = gr.Interface(
@@ -324,12 +379,18 @@ interface = gr.Interface(
     inputs=[
         gr.Image(type="pil", label="Upload Image"),
         gr.Dropdown(
+            label="Select model",
+            choices=["Blip2 fine-tuned", "Model from scratch"],
+            value="Model from scratch",
+        ),
+        gr.Dropdown(
             label="Select Language",
             choices=["Bengali", "English", "Gujarati", "Hindi", "Kannada", "Malayalam", "Marathi", "Nepali", "Punjabi", "Tamil", "Telugu", "Urdu"],
             value="English",
         )
     ],
     outputs=[
+        gr.Textbox(label="Message"),
         gr.Textbox(label="English caption "),
         gr.Textbox(label="Caption in preferred language"),
         gr.Audio(label="Audio Description"),
@@ -343,3 +404,5 @@ interface = gr.Interface(
 
 # Launch the interface
 interface.launch()
+ 
+    
