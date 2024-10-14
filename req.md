@@ -4,3 +4,5 @@ gtts
 playsound
 ipython
 gradio
+torch
+transformers
