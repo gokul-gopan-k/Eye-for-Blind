@@ -8,7 +8,7 @@ cd Eye-for-Blind
 pip install -r requirements.txt
 git clone https://github.com/VarunGumma/IndicTransToolkit.git
 pip install gdown
-gdown "https://drive.google.com/uc?id=1yUQYZaTvslZ_2hHXUZrgFypTFR22L3bE"
+gdown --folder "https://drive.google.com/drive/folders/1yUQYZaTvslZ_2hHXUZrgFypTFR22L3bE"
 
 
-https://drive.google.com/drive/folders/1yUQYZaTvslZ_2hHXUZrgFypTFR22L3bE?usp=sharing
+
