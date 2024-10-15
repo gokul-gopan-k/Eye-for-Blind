@@ -130,6 +130,6 @@ websockets==12.0
 Werkzeug==3.0.4
 wrapt==1.16.0
 
-#https://github.com/VarunGumma/IndicTransToolkit.git
+
 
 
