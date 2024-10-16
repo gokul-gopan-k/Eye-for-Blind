@@ -11,6 +11,8 @@ import os
 
 import matplotlib.pyplot as plt
 
+
+
 #library for image processing
 from PIL import Image
 from io import BytesIO
@@ -26,7 +28,7 @@ import gradio as gr
 from gtts import gTTS
 
 # Create the checkpoint path
-checkpoint_path = os.path.join("/Users/gokulgopank/Documents/deploy/checkpoints", "train")
+checkpoint_path = os.path.join("Eye_blind_files", "train")
 optimizer = tf.keras.optimizers.Adam()
 
 
@@ -34,16 +36,16 @@ optimizer = tf.keras.optimizers.Adam()
 import torch
 from transformers import (AutoModelForSeq2SeqLM,AutoTokenizer)
 import IndicTransToolkit 
-from IndicTransToolkit import IndicProcessor
+from IndicTransToolkit.IndicTransToolkit import IndicProcessor
 
 from transformers import Blip2ForConditionalGeneration
 from peft import PeftModel, PeftConfig
 from tqdm import tqdm
 from transformers import Blip2Processor
 
-peft_model_id = "/Users/gokulgopank/Documents/deploy/peft"
+peft_model_id = "Eye_blind_files/peft"
 config = PeftConfig.from_pretrained(peft_model_id)
-offload_folder = '/Users/gokulgopank/Documents/deploy/offload'
+offload_folder = 'Eye_blind_files/offload'
 device = "cuda" if torch.cuda.is_available() else "cpu"
 device_map = {
     "query_tokens": 0,
@@ -164,7 +166,7 @@ else:
 
 
 # Load the tokenizer from the saved file
-with open('tokenizer.pickle', 'rb') as handle:
+with open('Eye_blind_files/tokenizer.pickle', 'rb') as handle:
     tokenizer = pickle.load(handle)
 
 #load pretrained model
@@ -297,7 +299,8 @@ trans_dict = {"Bengali": ["ben_Beng","bn"],"English": ["eng_Latn","en"],"Gujarat
     "Hindi": ["hin_Deva","hi"],"Kannada": ["kan_Knda","kn"],"Malayalam": ["mal_Mlym","ml"],"Marathi": ["mar_Deva","mr"],
     "Nepali": ["npi_Deva","ne"],"Punjabi": ["pan_Guru","pa"],"Tamil": ["tam_Taml","ta"],"Telugu": ["tel_Telu","te"],"Urdu": ["urd_Arab","ur"],}
 
-example_images = [["/Users/gokulgopank/Documents/deploy/Capstone/Images/667626_18933d713e.jpg"],["/Users/gokulgopank/Documents/deploy/Capstone/Images/3637013_c675de7705.jpg"]]
+example_images = [["Eye_blind_files/sample_images/3298199743_d8dd8f94a0.jpg"],["Eye_blind_files/sample_images/3298233193_d2a550840d.jpg"],["Eye_blind_files/sample_images/3299418821_21531b5b3c.jpg"],
+                  ["Eye_blind_files/sample_images/3301754574_465af5bf6d.jpg"],["Eye_blind_files/sample_images/3302804312_0272091cd5.jpg"]]
 
 def get_att_plot(result,attention_plot):
     output_images,image_titles = plot_attmap(result,attention_plot)
@@ -360,14 +363,10 @@ def process_image(image,mod_name, lan):
     speech = gTTS("Predicted Caption is: "+ tar_cap,lang = lange, slow = False)
     speech.save('audio.mp3')
     if mod_name == "Model from scratch":
-        message = "Using a model trained from scratch. Results may vary."
-    else:
-        message = "Using blip2 fine tuned model. Inference may take upto 30s"
-    if mod_name == "Model from scratch":
         images = get_att_plot(result,attention_plot)   
-        return message, eng_cap, tar_cap, "audio.mp3", gr.update(value=images, visible=True)
+        return eng_cap, tar_cap, "audio.mp3", gr.update(value=images, visible=True)
     else:
-        return message, eng_cap, tar_cap, "audio.mp3", gr.update(visible=False)
+        return eng_cap, tar_cap, "audio.mp3", gr.update(visible=False)
 
 
 # Create the Gradio interface
@@ -378,7 +377,7 @@ interface = gr.Interface(
         gr.Dropdown(
             label="Select model",
             choices=["Blip2 fine-tuned", "Model from scratch"],
-            value="Model from scratch",
+            value="Blip2 fine-tuned",
         ),
         gr.Dropdown(
             label="Select Language",
@@ -387,16 +386,15 @@ interface = gr.Interface(
         )
     ],
     outputs=[
-        gr.Textbox(label="Message"),
         gr.Textbox(label="English caption "),
         gr.Textbox(label="Caption in preferred language"),
         gr.Audio(label="Audio Description"),
         # gr.Gallery(label="Generated Images", show_label=True, elem_id="gallery")
-        gr.Gallery(label="Random Images"),     
+        gr.Gallery(label="Attention plots per word"),     
     ],
     examples=example_images,
-    title="Image to Text and Audio",
-    description="Upload an image, select a category, and get a description in text and audio format."
+    title="Eye for Blind",
+    description="Upload an image, select a the model and preferred language. For Blip2 fine-tuned model, inference might take around 30 seconds."
 )
 
 # Launch the interface
