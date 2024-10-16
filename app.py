@@ -8,11 +8,8 @@ import numpy as np
 
 import os
 # libraries for visualisation
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-# library for model build
-from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 
 #library for image processing
 from PIL import Image
