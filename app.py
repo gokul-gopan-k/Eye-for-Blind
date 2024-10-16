@@ -394,7 +394,7 @@ interface = gr.Interface(
     ],
     examples=example_images,
     title="Eye for Blind",
-    description="Upload an image, select a the model and preferred language. For Blip2 fine-tuned model, inference might take around 30 seconds."
+    description="Upload an image, select a model and a preferred language. For Blip2 fine-tuned model, inference might take around 30 seconds."
 )
 
 # Launch the interface
