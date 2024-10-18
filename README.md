@@ -1,16 +1,26 @@
-python -m venv .venv   
-source .venv/bin/activate
+## How to run app interface
+* Creare virtual environment
+  
+```python -m venv .venv ```  
+```source .venv/bin/activate ```
 
-git clone https://github.com/gokul-gopan-k/Eye-for-Blind.git
-cd Eye-for-Blind
+* Clone the repo
 
-Make the script executable:
-chmod +x script.sh
+```git clone https://github.com/gokul-gopan-k/Eye-for-Blind.git```
 
-Run the script:
-./script.sh
+```cd Eye-for-Blind```
 
-python3 app.py
+* Make the script executable:
+  
+```chmod +x script.sh```
+
+* Run the script:
+  
+```./script.sh```
+
+* Run the app
+  
+```python3 app.py```
 
 
 
