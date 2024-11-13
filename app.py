@@ -270,7 +270,7 @@ def process_image(image, model_name, lang):
     image_path = os.path.join(save_dir, "uploaded_image.jpg")
     image.save(image_path)
     
-    if model_name == "Model from scratch":
+    if model_name == "Encoder-decoder model with attention":
         eng_caption, result, attention_plot = gen_cap(image_path)
     else:
         eng_caption = gen_caption_blip(image_path)
@@ -285,7 +285,7 @@ def process_image(image, model_name, lang):
     audio_output = gTTS("Predicted Caption is: " + translated_caption, lang = lange,  slow = False)
     audio_output.save("audio.mp3")
 
-    if model_name == "Model from scratch":
+    if model_name == "Encoder-decoder model with attention":
         attention_images = get_attention_plot(result, attention_plot)
         return eng_caption, translated_caption, "audio.mp3", gr.update(value = attention_images , visible=True)
     else:
@@ -296,7 +296,7 @@ interface = gr.Interface(
     fn=process_image,
     inputs=[
         gr.Image(type="pil", label="Upload Image"),
-        gr.Dropdown(label="Select Model", choices=["Blip2 fine-tuned", "Model from scratch"], value="Blip2 fine-tuned"),
+        gr.Dropdown(label="Select Model", choices=["Blip2 fine-tuned", "Encoder-decoder model with attention"], value="Blip2 fine-tuned"),
         gr.Dropdown(label="Select Language", choices=["Bengali", "English", "Gujarati", "Hindi", "Kannada", "Malayalam", "Marathi", "Punjabi", "Tamil", "Telugu", "Urdu"], value="English"),
     ],
     outputs=[
