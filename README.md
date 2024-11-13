@@ -20,7 +20,7 @@
 
 * Run the app
   
-```python3 app.py```
+```python app.py```
 
 
 
