@@ -7,7 +7,6 @@ from PIL import Image
 from io import BytesIO
 from gtts import gTTS
 from IPython import display
-import pickle
 import gradio as gr
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Blip2ForConditionalGeneration, Blip2Processor
@@ -16,8 +15,6 @@ import IndicTransToolkit
 from IndicTransToolkit.IndicTransToolkit import IndicProcessor
 
 # Setup paths and models
-CHECKPOINT_PATH = os.path.join("Eye_blind_files", "train")
-OPTIMIZER = tf.keras.optimizers.Adam()
 PEFT_MODEL_ID = "Eye_blind_files/peft"
 OFFLOAD_FOLDER = 'Eye_blind_files/offload'
 
@@ -49,130 +46,6 @@ tokenizer_ind = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name, trust_remote_code=True)
 ip = IndicProcessor(inference=True)
 
-
-# Encoder class
-class Encoder(tf.keras.Model):
-    def __init__(self, embed_dim):
-        super(Encoder, self).__init__()
-        self.dense = tf.keras.layers.Dense(embed_dim)
-
-    def call(self, features):
-        features = self.dense(features)
-        features = tf.nn.relu(features)
-        return features
-
-# Attention model class
-class AttentionModel(tf.keras.Model):
-    def __init__(self, units):
-        super(AttentionModel, self).__init__()
-        self.W1 = tf.keras.layers.Dense(units)
-        self.W2 = tf.keras.layers.Dense(units)
-        self.V = tf.keras.layers.Dense(1)
-        self.units = units
-
-    def call(self, features, hidden):
-        hidden_with_time_axis = tf.expand_dims(hidden, 1)
-        attention_hidden_layer = tf.nn.tanh(self.W1(features) + self.W2(hidden_with_time_axis))
-        score = self.V(attention_hidden_layer)
-        attention_weights = tf.nn.softmax(score, axis=1)
-        context_vector = attention_weights * features
-        context_vector = tf.reduce_sum(context_vector, axis=1)
-        return context_vector, attention_weights
-
-# Decoder class
-class Decoder(tf.keras.Model):
-    def __init__(self, embed_dim, units, vocab_size):
-        super(Decoder, self).__init__()
-        self.units = units
-        self.attention = AttentionModel(self.units)
-        self.embedding = tf.keras.layers.Embedding(vocab_size, embed_dim)
-        self.gru = tf.keras.layers.GRU(self.units, return_sequences=True, return_state=True,
-                                       recurrent_initializer='glorot_uniform')
-        self.fc1 = tf.keras.layers.Dense(self.units)
-        self.fc2 = tf.keras.layers.Dense(vocab_size)
-
-    def call(self, x, features, hidden):
-        context_vector, attention_weights = self.attention(features, hidden)
-        x = self.embedding(x)
-        x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
-        output, state = self.gru(x)
-        output = self.fc1(output)
-        output = tf.reshape(output, (-1, output.shape[2]))
-        output = self.fc2(output)
-        return output, state, attention_weights
-
-    def init_state(self, batch_size):
-        return tf.zeros((batch_size, self.units))
-
-# Setup models and checkpoint manager
-embedding_dim = 256
-units = 512
-vocab_size = 5001
-encoder = Encoder(embedding_dim)
-decoder = Decoder(embedding_dim, units, vocab_size)
-
-ckpt = tf.train.Checkpoint(encoder=encoder, decoder=decoder, optimizer=OPTIMIZER)
-ckpt_manager = tf.train.CheckpointManager(ckpt, CHECKPOINT_PATH, max_to_keep=5)
-
-# Restore the latest checkpoint if available
-if ckpt_manager.latest_checkpoint:
-    ckpt.restore(ckpt_manager.latest_checkpoint)
-    print(f'Model restored from checkpoint: {ckpt_manager.latest_checkpoint}')
-else:
-    print('No checkpoint found, please train the model first.')
-
-# Load tokenizer
-with open('Eye_blind_files/tokenizer.pickle', 'rb') as handle:
-    tokenizer = pickle.load(handle)
-
-max_sequence_len = 35
-attention_features_shape = 64
-
-# Pretrained InceptionV3 model for image feature extraction
-image_model = tf.keras.applications.InceptionV3(include_top=False, weights='imagenet')
-new_input = image_model.input
-hidden_layer = image_model.layers[-1].output
-image_features_extract_model = tf.keras.Model(new_input, hidden_layer)
-
-# Utility functions
-def load_image(image_path):
-    img = tf.io.read_file(image_path)
-    img = tf.image.decode_jpeg(img, channels=3)
-    img = tf.image.resize(img, (299, 299))
-    img = tf.keras.applications.inception_v3.preprocess_input(img)
-    return img, image_path
-
-# Function for evaluation
-def evaluate(image):
-    attention_plot = np.zeros((max_sequence_len, attention_features_shape))
-    hidden = decoder.init_state(batch_size=1)
-    temp_input = tf.expand_dims(load_image(image)[0], 0)
-    img_tensor_val = image_features_extract_model(temp_input)
-    img_tensor_val = tf.reshape(img_tensor_val, (img_tensor_val.shape[0], -1, img_tensor_val.shape[3]))
-    features = encoder(img_tensor_val)
-    dec_input = tf.expand_dims([tokenizer.word_index['<start>']], 0)
-    result = []
-
-    for i in range(max_sequence_len):
-        predictions, hidden, attention_weights = decoder(dec_input, features, hidden)
-        attention_plot[i] = tf.reshape(attention_weights, (-1,)).numpy()
-        predicted_id = tf.random.categorical(predictions, 1)[0][0].numpy()
-        result.append(tokenizer.index_word[predicted_id])
-
-        if tokenizer.index_word[predicted_id] == '<end>':
-            return result, attention_plot, predictions
-
-        dec_input = tf.expand_dims([predicted_id], 0)
-    
-    attention_plot = attention_plot[:len(result), :]
-    return result, attention_plot, predictions
-
-# Filter function for the generated text
-def filter_text(text):
-    remove_tokens = ['<start>', '<unk>', '<end>']
-    tokens = text.split()
-    return ' '.join([word for word in tokens if word not in remove_tokens])
-
 # Translate function for generating captions in different languages
 def translate(eng_caption, tgt_lang):
     input_sentences = [eng_caption]
@@ -192,23 +65,6 @@ def translate(eng_caption, tgt_lang):
         print(f"{tgt_lang}: {translation}")
         return translation
 
-# function to generate caption
-def test_caption_generation(img_test):
-
-    result, attention_plot,pred_test = evaluate(img_test)
-    pred_caption=' '.join(result).rsplit(' ', 1)[0]
-
-    print ('Prediction Caption:', pred_caption)
-    # use Google Text to Speech Online API from playing the predicted caption as audio
-    speech = gTTS("Predicted Caption is: "+ pred_caption,lang = 'en', slow = False)
-    speech.save('audio.mp3')
-    audio_file = 'audio.mp3'
-    #playsound('voice.wav')
-    display.display(display.Audio(audio_file, rate=None,autoplay=False))
-
-    #return the test image and attention plot
-    return result, attention_plot
-
 # Function for generating a caption using BLIP2 model
 def gen_caption_blip(image_path):
     image = Image.open(image_path)
@@ -219,49 +75,6 @@ def gen_caption_blip(image_path):
     generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
     return generated_caption
 
-# function to plot attention map
-def plot_attmap(caption, weights):
-    weights_map=[]
-    cap_map=[]
-    
-    len_cap = len(caption)
-    for cap in range(len_cap):
-        weights_img = np.reshape(weights[cap], (8,8))
-        #reshape
-        weights_img = np.array(Image.fromarray(weights_img).resize((224, 224), Image.LANCZOS))
-        weights_map.append(weights_img)
-        cap_map.append(caption[cap])
-    plt.imshow(weights_map[0],cmap='gist_heat')
-    return weights_map,cap_map
-
-def get_attention_plot(result,attention_plot):
-    output_images,image_titles = plot_attmap(result,attention_plot)
-    plt.imshow(output_images[0])
-
-    num_images = len(output_images)  # Number of random images to generate
-    images = []  # List to hold images
-   
-    for i in range(num_images):
-        image = output_images[i]  # Create a random RGB image
-        plt.imshow(image,cmap='gist_heat', alpha =0.6)
-        plt.axis('off')  # Turn off axis
-        title = image_titles[i]  # Title for each image
-        plt.title(title)
-
-        # Save the figure to a BytesIO object
-        buf = BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-        plt.close()  # Close the figure to prevent display
-        buf.seek(0)  # Rewind the BytesIO object
-        img = Image.open(buf)  # Open the image using PIL
-        images.append(img)  # Append the PIL image to the list
-    return images
-
-def gen_cap(img_test_path):
-    result, attention_plot,pred_test = evaluate(img_test_path)
-    pred_caption=' '.join(result).rsplit(' ', 1)[0]
-    #return the test image and attention plot
-    return pred_caption,result,attention_plot
 
 # Gradio interface
 def process_image(image, model_name, lang):
@@ -270,10 +83,7 @@ def process_image(image, model_name, lang):
     image_path = os.path.join(save_dir, "uploaded_image.jpg")
     image.save(image_path)
     
-    if model_name == "Encoder-decoder model with attention":
-        eng_caption, result, attention_plot = gen_cap(image_path)
-    else:
-        eng_caption = gen_caption_blip(image_path)
+    eng_caption = gen_caption_blip(image_path)
     
     if lang == "English":
         translated_caption = eng_caption
@@ -285,29 +95,24 @@ def process_image(image, model_name, lang):
     audio_output = gTTS("Predicted Caption is: " + translated_caption, lang = lange,  slow = False)
     audio_output.save("audio.mp3")
 
-    if model_name == "Encoder-decoder model with attention":
-        attention_images = get_attention_plot(result, attention_plot)
-        return eng_caption, translated_caption, "audio.mp3", gr.update(value = attention_images , visible=True)
-    else:
-        return eng_caption, translated_caption, "audio.mp3", gr.update(visible = False)
+    return eng_caption, translated_caption, "audio.mp3"
 
 # Launch Gradio interface
 interface = gr.Interface(
     fn=process_image,
     inputs=[
         gr.Image(type="pil", label="Upload Image"),
-        gr.Dropdown(label="Select Model", choices=["Blip2 fine-tuned", "Encoder-decoder model with attention"], value="Blip2 fine-tuned"),
+        gr.Textbox(label="Model used", value="Blip2 fine-tuned Model"),
         gr.Dropdown(label="Select Language", choices=["Bengali", "English", "Gujarati", "Hindi", "Kannada", "Malayalam", "Marathi", "Punjabi", "Tamil", "Telugu", "Urdu"], value="English"),
     ],
     outputs=[
         gr.Textbox(label="Generated English Caption"),
         gr.Textbox(label="Translated Caption"),
         gr.Audio(label="Audio Output"),
-        gr.Gallery(label="Attention Plots")
     ],
     examples=example_images,
     title="Eye for Blind",
-    description="Upload an image, select model and language to get audio output for visually challeneged person."
+    description="Upload an image, select language to get audio output for visually challeneged person."
 )
 # Launch the interface
 interface.launch()
