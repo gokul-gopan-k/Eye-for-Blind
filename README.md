@@ -35,3 +35,4 @@ Today, in the world of social media, millions of images are uploaded daily. Some
 
 2) Blip-2 fine tuned model
    Blip-2 transformer model is fine tuned using LoRA (Low rank adoption) approach on the custom Flikr8 dataset.
+   IndicTrans model is used to convert the text ouput into different indian regional languages before converting it to audio format.
